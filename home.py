@@ -37,19 +37,27 @@ if 'df' not in st.session_state:
             '3'
         ],
         'Kategorie': [
-            'IT',
-            'IT',
-            'Marketing',
-            'HR',
-            'IT'
+            ['IT', 'Entwicklung'],
+            ['IT', 'Datenbank'],
+            ['Marketing'],
+            ['HR', 'Schulung'],
+            ['IT', 'Infrastruktur']
         ]
     }
     
     st.session_state.df = pd.DataFrame(data)
-    # Spalten in Category-Datentyp konvertieren
+    # Spalten in Category-Datentyp konvertieren (nur für Geld und Zeit)
     st.session_state.df['Geld'] = st.session_state.df['Geld'].astype('category')
     st.session_state.df['Zeit'] = st.session_state.df['Zeit'].astype('category')
-    st.session_state.df['Kategorie'] = st.session_state.df['Kategorie'].astype('category')
+
+# Verfügbare Kategorien aus allen Einträgen sammeln
+if 'verfuegbare_kategorien' not in st.session_state:
+    # Alle Kategorien aus dem DataFrame extrahieren
+    alle_kategorien = set()
+    for kategorien_liste in st.session_state.df['Kategorie']:
+        if isinstance(kategorien_liste, list):
+            alle_kategorien.update(kategorien_liste)
+    st.session_state.verfuegbare_kategorien = sorted(list(alle_kategorien))
 
 # Tabs erstellen (vertauscht)
 tab1, tab2 = st.tabs(["🎲 Zufälligen Eintrag finden", "📝 Einträge verwalten"])
@@ -77,7 +85,7 @@ with tab1:
     with col3:
         kategorie_filter = st.multiselect(
             "Kategorie filtern:",
-            options=sorted(st.session_state.df['Kategorie'].unique()),
+            options=st.session_state.verfuegbare_kategorien,
             default=None
         )
     
@@ -91,7 +99,10 @@ with tab1:
         filtered_df = filtered_df[filtered_df['Zeit'].isin(zeit_filter)]
     
     if kategorie_filter:
-        filtered_df = filtered_df[filtered_df['Kategorie'].isin(kategorie_filter)]
+        # Filtern nach Kategorien (ein Eintrag muss mindestens eine der ausgewählten Kategorien haben)
+        filtered_df = filtered_df[filtered_df['Kategorie'].apply(
+            lambda x: any(kat in x for kat in kategorie_filter) if isinstance(x, list) else False
+        )]
     
     st.write(f"**{len(filtered_df)}** Einträge entsprechen den Filtern")
     
@@ -111,7 +122,9 @@ with tab1:
             with col2:
                 st.metric("⏱️ Zeit", zufalls_eintrag['Zeit'])
             with col3:
-                st.metric("📁 Kategorie", zufalls_eintrag['Kategorie'])
+                # Kategorien als Liste anzeigen
+                kategorien_text = ", ".join(zufalls_eintrag['Kategorie'])
+                st.metric("📁 Kategorien", kategorien_text)
     else:
         st.warning("⚠️ Keine Einträge gefunden, die den Filtern entsprechen.")
 
@@ -119,14 +132,75 @@ with tab1:
 with tab2:
     st.header("Einträge verwalten")
     
-    # Zwei Unterabschnitte: Neu hinzufügen und Bearbeiten
+    # Drei Unterabschnitte: Neu hinzufügen, Bearbeiten und Kategorien verwalten
     action = st.radio(
         "Was möchtest du tun?",
-        ["Neuen Eintrag hinzufügen", "Bestehenden Eintrag bearbeiten"],
+        ["Neuen Eintrag hinzufügen", "Bestehenden Eintrag bearbeiten", "Kategorien verwalten"],
         horizontal=True
     )
     
-    if action == "Neuen Eintrag hinzufügen":
+    if action == "Kategorien verwalten":
+        st.subheader("🏷️ Kategorien verwalten")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Vorhandene Kategorien:**")
+            if st.session_state.verfuegbare_kategorien:
+                for i, kat in enumerate(st.session_state.verfuegbare_kategorien):
+                    st.write(f"{i+1}. {kat}")
+            else:
+                st.info("Noch keine Kategorien vorhanden.")
+        
+        with col2:
+            st.write("**Neue Kategorie hinzufügen:**")
+            neue_kat_name = st.text_input("Name der neuen Kategorie:", key="neue_kat_verwaltung")
+            if st.button("Kategorie hinzufügen"):
+                if neue_kat_name:
+                    if neue_kat_name not in st.session_state.verfuegbare_kategorien:
+                        st.session_state.verfuegbare_kategorien.append(neue_kat_name)
+                        st.session_state.verfuegbare_kategorien = sorted(st.session_state.verfuegbare_kategorien)
+                        st.success(f"✅ Kategorie '{neue_kat_name}' wurde hinzugefügt!")
+                        st.rerun()
+                    else:
+                        st.error("Diese Kategorie existiert bereits!")
+                else:
+                    st.error("Bitte gib einen Namen ein!")
+        
+        st.divider()
+        
+        # Kategorie löschen
+        st.write("**Kategorie löschen:**")
+        if st.session_state.verfuegbare_kategorien:
+            zu_loeschende_kat = st.selectbox(
+                "Wähle eine Kategorie zum Löschen:",
+                options=st.session_state.verfuegbare_kategorien,
+                key="kat_loeschen"
+            )
+            
+            if st.button("Kategorie löschen", type="secondary"):
+                # Prüfen, ob Kategorie noch verwendet wird
+                verwendung = 0
+                for kategorien_liste in st.session_state.df['Kategorie']:
+                    if isinstance(kategorien_liste, list) and zu_loeschende_kat in kategorien_liste:
+                        verwendung += 1
+                
+                if verwendung > 0:
+                    st.warning(f"⚠️ Diese Kategorie wird noch in {verwendung} Einträgen verwendet. Sie wird aus allen Einträgen entfernt.")
+                    
+                    # Aus allen Einträgen entfernen
+                    st.session_state.df['Kategorie'] = st.session_state.df['Kategorie'].apply(
+                        lambda x: [k for k in x if k != zu_loeschende_kat] if isinstance(x, list) else x
+                    )
+                
+                # Aus verfügbaren Kategorien entfernen
+                st.session_state.verfuegbare_kategorien.remove(zu_loeschende_kat)
+                st.success(f"🗑️ Kategorie '{zu_loeschende_kat}' wurde gelöscht!")
+                st.rerun()
+        else:
+            st.info("Keine Kategorien zum Löschen vorhanden.")
+    
+    elif action == "Neuen Eintrag hinzufügen":
         st.subheader("➕ Neuen Eintrag erstellen")
         
         with st.form("neuer_eintrag"):
@@ -142,28 +216,20 @@ with tab2:
                 zeit = st.selectbox("Zeit", options=["1", "2", "3"])
             
             with col3:
-                # Dynamisch alle vorhandenen Kategorien + Option für neue
-                vorhandene_kategorien = sorted(st.session_state.df['Kategorie'].unique().tolist())
-                kategorie_auswahl = st.selectbox(
-                    "Kategorie", 
-                    options=vorhandene_kategorien + ["+ Neue Kategorie"]
+                # Multiselect für Kategorien
+                kategorien = st.multiselect(
+                    "Kategorien (mehrere möglich):",
+                    options=st.session_state.verfuegbare_kategorien,
+                    default=None
                 )
-            
-            # Textfeld für neue Kategorie (immer anzeigen, aber nur relevant wenn ausgewählt)
-            neue_kategorie = ""
-            if kategorie_auswahl == "+ Neue Kategorie":
-                neue_kategorie = st.text_input("Name der neuen Kategorie:")
-                kategorie = neue_kategorie
-            else:
-                kategorie = kategorie_auswahl
             
             submitted = st.form_submit_button("Eintrag hinzufügen")
             
             if submitted:
                 if not titel or not beschreibung:
                     st.error("Bitte fülle Titel und Beschreibung aus!")
-                elif kategorie_auswahl == "+ Neue Kategorie" and not neue_kategorie:
-                    st.error("Bitte gib einen Namen für die neue Kategorie ein!")
+                elif not kategorien:
+                    st.error("Bitte wähle mindestens eine Kategorie aus!")
                 else:
                     # Neuen Eintrag erstellen
                     neuer_eintrag = pd.DataFrame({
@@ -171,7 +237,7 @@ with tab2:
                         'Beschreibung': [beschreibung],
                         'Geld': [geld],
                         'Zeit': [zeit],
-                        'Kategorie': [kategorie]
+                        'Kategorie': [kategorien]
                     })
                     
                     # Zum DataFrame hinzufügen
@@ -183,7 +249,6 @@ with tab2:
                     # Category-Datentypen beibehalten
                     st.session_state.df['Geld'] = st.session_state.df['Geld'].astype('category')
                     st.session_state.df['Zeit'] = st.session_state.df['Zeit'].astype('category')
-                    st.session_state.df['Kategorie'] = st.session_state.df['Kategorie'].astype('category')
                     
                     st.success(f"✅ '{titel}' wurde erfolgreich hinzugefügt!")
                     st.rerun()
@@ -226,26 +291,13 @@ with tab2:
                     )
                 
                 with col3:
-                    vorhandene_kategorien = sorted(st.session_state.df['Kategorie'].unique().tolist())
-                    # Aktuellen Wert finden oder ersten verwenden
-                    try:
-                        current_idx = vorhandene_kategorien.index(eintrag['Kategorie'])
-                    except ValueError:
-                        current_idx = 0
-                    
-                    kategorie_neu_auswahl = st.selectbox(
-                        "Kategorie",
-                        options=vorhandene_kategorien + ["+ Neue Kategorie"],
-                        index=current_idx
+                    # Multiselect für Kategorien mit vorausgewählten Werten
+                    aktuelle_kategorien = eintrag['Kategorie'] if isinstance(eintrag['Kategorie'], list) else []
+                    kategorien_neu = st.multiselect(
+                        "Kategorien (mehrere möglich):",
+                        options=st.session_state.verfuegbare_kategorien,
+                        default=aktuelle_kategorien
                     )
-                
-                # Textfeld für neue Kategorie
-                neue_kat = ""
-                if kategorie_neu_auswahl == "+ Neue Kategorie":
-                    neue_kat = st.text_input("Name der neuen Kategorie:")
-                    kategorie_neu = neue_kat
-                else:
-                    kategorie_neu = kategorie_neu_auswahl
                 
                 col_a, col_b = st.columns(2)
                 with col_a:
@@ -256,20 +308,19 @@ with tab2:
                 if update_button:
                     if not titel_neu or not beschreibung_neu:
                         st.error("Bitte fülle Titel und Beschreibung aus!")
-                    elif kategorie_neu_auswahl == "+ Neue Kategorie" and not neue_kat:
-                        st.error("Bitte gib einen Namen für die neue Kategorie ein!")
+                    elif not kategorien_neu:
+                        st.error("Bitte wähle mindestens eine Kategorie aus!")
                     else:
                         # Eintrag aktualisieren
                         st.session_state.df.at[eintrag_idx, 'Titel'] = titel_neu
                         st.session_state.df.at[eintrag_idx, 'Beschreibung'] = beschreibung_neu
                         st.session_state.df.at[eintrag_idx, 'Geld'] = geld_neu
                         st.session_state.df.at[eintrag_idx, 'Zeit'] = zeit_neu
-                        st.session_state.df.at[eintrag_idx, 'Kategorie'] = kategorie_neu
+                        st.session_state.df.at[eintrag_idx, 'Kategorie'] = kategorien_neu
                         
                         # Category-Datentypen beibehalten
                         st.session_state.df['Geld'] = st.session_state.df['Geld'].astype('category')
                         st.session_state.df['Zeit'] = st.session_state.df['Zeit'].astype('category')
-                        st.session_state.df['Kategorie'] = st.session_state.df['Kategorie'].astype('category')
                         
                         st.success(f"✅ '{titel_neu}' wurde erfolgreich aktualisiert!")
                         st.rerun()
@@ -281,7 +332,6 @@ with tab2:
                     # Category-Datentypen beibehalten
                     st.session_state.df['Geld'] = st.session_state.df['Geld'].astype('category')
                     st.session_state.df['Zeit'] = st.session_state.df['Zeit'].astype('category')
-                    st.session_state.df['Kategorie'] = st.session_state.df['Kategorie'].astype('category')
                     
                     st.success(f"🗑️ '{ausgewaehlter_titel}' wurde gelöscht!")
                     st.rerun()
@@ -289,4 +339,7 @@ with tab2:
     # Alle vorhandenen Einträge anzeigen
     st.divider()
     st.subheader(f"Alle Einträge ({len(st.session_state.df)})")
-    st.dataframe(st.session_state.df, use_container_width=True)
+    # DataFrame für Anzeige vorbereiten (Kategorien als String)
+    df_anzeige = st.session_state.df.copy()
+    df_anzeige['Kategorie'] = df_anzeige['Kategorie'].apply(lambda x: ", ".join(x) if isinstance(x, list) else str(x))
+    st.dataframe(df_anzeige, use_container_width=True)
