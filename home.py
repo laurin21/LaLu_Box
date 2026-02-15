@@ -1,0 +1,41 @@
+import streamlit as st
+import pandas as pd
+import datetime as dt
+from streamlit_gsheets import GSheetsConnection
+
+#############
+
+# Display Title and Description
+st.title("Bücher Stats!")
+st.markdown("Enter the details of the new vendor below.")
+
+url = "https://docs.google.com/spreadsheets/d/1UqgZb1MJCsfr9300dnphCGBvPlWxxMyNNnt4nppqdKY/edit?usp=sharing"
+
+# Establishing a Google Sheets connection
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# Fetch existing vendors data
+updated = conn.read(spreadsheet = url, worksheet="Updates") # Updates
+buecher = conn.read(spreadsheet = url, worksheet="Bücher") # Bücher
+
+st.markdown("### Neues Buch")
+
+titel = st.text_input(label="Buchtitel")
+autor = st.text_input(label="Autor")
+seiten = st.number_input(label="Seiten")
+
+if st.button('Enter neues Buch'):
+    if not titel or not autor or not seiten:
+                st.warning("Ensure all mandatory fields are filled.")
+    new_data = pd.DataFrame({"Buch_ID": [buecher["Buch_ID"].max()],
+                            "Titel": [titel], 
+                             "Autor": [autor], 
+                             "Seiten": [seiten],
+                             "Fortschritt": [0]})
+    new_buecher = pd.concat([buecher, new_data], ignore_index=True)
+    conn.update(worksheet="Bücher", data=new_buecher)
+    st.success("Buch wurde erfolgreich hinzugefügt")
+
+
+st.table(updated)
+st.table(buecher)
