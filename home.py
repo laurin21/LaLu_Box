@@ -146,13 +146,13 @@ with tab2:
                 vorhandene_kategorien = sorted(st.session_state.df['Kategorie'].unique().tolist())
                 kategorie_auswahl = st.selectbox(
                     "Kategorie", 
-                    options=vorhandene_kategorien + ["Neue Kategorie..."]
+                    options=vorhandene_kategorien + ["+ Neue Kategorie"]
                 )
             
-            # Wenn "Neue Kategorie" gewählt wurde
-            neue_kategorie = None
-            if kategorie_auswahl == "Neue Kategorie...":
-                neue_kategorie = st.text_input("Neue Kategorie eingeben")
+            # Textfeld für neue Kategorie (immer anzeigen, aber nur relevant wenn ausgewählt)
+            neue_kategorie = ""
+            if kategorie_auswahl == "+ Neue Kategorie":
+                neue_kategorie = st.text_input("Name der neuen Kategorie:")
                 kategorie = neue_kategorie
             else:
                 kategorie = kategorie_auswahl
@@ -162,8 +162,8 @@ with tab2:
             if submitted:
                 if not titel or not beschreibung:
                     st.error("Bitte fülle Titel und Beschreibung aus!")
-                elif kategorie_auswahl == "Neue Kategorie..." and not neue_kategorie:
-                    st.error("Bitte gib eine neue Kategorie ein!")
+                elif kategorie_auswahl == "+ Neue Kategorie" and not neue_kategorie:
+                    st.error("Bitte gib einen Namen für die neue Kategorie ein!")
                 else:
                     # Neuen Eintrag erstellen
                     neuer_eintrag = pd.DataFrame({
@@ -227,16 +227,22 @@ with tab2:
                 
                 with col3:
                     vorhandene_kategorien = sorted(st.session_state.df['Kategorie'].unique().tolist())
+                    # Aktuellen Wert finden oder ersten verwenden
+                    try:
+                        current_idx = vorhandene_kategorien.index(eintrag['Kategorie'])
+                    except ValueError:
+                        current_idx = 0
+                    
                     kategorie_neu_auswahl = st.selectbox(
                         "Kategorie",
-                        options=vorhandene_kategorien + ["Neue Kategorie..."],
-                        index=vorhandene_kategorien.index(eintrag['Kategorie']) if eintrag['Kategorie'] in vorhandene_kategorien else 0
+                        options=vorhandene_kategorien + ["+ Neue Kategorie"],
+                        index=current_idx
                     )
                 
-                # Wenn "Neue Kategorie" gewählt wurde
-                neue_kat = None
-                if kategorie_neu_auswahl == "Neue Kategorie...":
-                    neue_kat = st.text_input("Neue Kategorie eingeben")
+                # Textfeld für neue Kategorie
+                neue_kat = ""
+                if kategorie_neu_auswahl == "+ Neue Kategorie":
+                    neue_kat = st.text_input("Name der neuen Kategorie:")
                     kategorie_neu = neue_kat
                 else:
                     kategorie_neu = kategorie_neu_auswahl
@@ -250,8 +256,8 @@ with tab2:
                 if update_button:
                     if not titel_neu or not beschreibung_neu:
                         st.error("Bitte fülle Titel und Beschreibung aus!")
-                    elif kategorie_neu_auswahl == "Neue Kategorie..." and not neue_kat:
-                        st.error("Bitte gib eine neue Kategorie ein!")
+                    elif kategorie_neu_auswahl == "+ Neue Kategorie" and not neue_kat:
+                        st.error("Bitte gib einen Namen für die neue Kategorie ein!")
                     else:
                         # Eintrag aktualisieren
                         st.session_state.df.at[eintrag_idx, 'Titel'] = titel_neu
